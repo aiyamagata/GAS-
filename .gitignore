@@ -1,0 +1,32 @@
+# 機密情報を含むファイルを除外
+*.json
+*.log
+*.pid
+token.json
+token.pickle
+rapid-being-472521-a0-d01f438f34a9.json
+service-account-key.json
+
+# Python関連
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# IDE関連
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS関連
+.DS_Store
+Thumbs.db
+
+# 一時ファイル
+*.tmp
+*.temp
