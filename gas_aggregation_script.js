@@ -173,7 +173,7 @@ function saveAggregatedShifts_(shifts) {
   // ヘッダーを設定
   const headers = [
     'date', 'store', 'employee_id', 'employee_name', 'role',
-    'start_time', 'end_time', 'break_min', 'shift_type', 'notes',
+    'start_time', 'end_time', 'break_hour', 'total_hour', 'shift_type', 'work_content', 'notes',
     'manager', 'approved_at', 'source_spreadsheet_id', 'created_at', 'updated_at'
   ];
   
@@ -183,41 +183,82 @@ function saveAggregatedShifts_(shifts) {
   if (shifts.length > 0) {
     const now = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
     
-    const data = shifts.map(shift => [
-      shift.date,
-      shift.store,
-      shift.employee_id,
-      shift.employee_name,
-      shift.role,
-      shift.start_time,
-      shift.end_time,
-      shift.break_min,
-      shift.shift_type,
-      shift.notes,
-      shift.manager,
-      shift.approved_at,
-      '', // source_spreadsheet_id
-      now, // created_at
-      now  // updated_at
-    ]);
+    const data = shifts.map(shift => {
+      // 総労働時間を計算（start_time, end_time, break_hourから）
+      const totalHour = calculateTotalHour_(shift.start_time, shift.end_time, shift.break_hour);
+      
+      return [
+        shift.date,
+        shift.store,
+        shift.employee_id,
+        shift.employee_name,
+        shift.role,
+        shift.start_time,
+        shift.end_time,
+        shift.break_hour || '', // break_hour（時間）
+        totalHour, // total_hour（計算値）
+        shift.shift_type,
+        shift.work_content || '', // work_content
+        shift.notes,
+        shift.manager,
+        shift.approved_at,
+        '', // source_spreadsheet_id
+        now, // created_at
+        now  // updated_at
+      ];
+    });
     
     aggregatedSheet.getRange(2, 1, data.length, headers.length).setValues(data);
   }
 }
 
+// ===== 総労働時間を計算 =====
+function calculateTotalHour_(startTime, endTime, breakHour) {
+  try {
+    // 時間文字列（HH:MM形式）を分に変換
+    const startMinutes = timeToMinutes_(startTime);
+    const endMinutes = timeToMinutes_(endTime);
+    
+    // 休憩時間を分に変換（break_hourが時間単位の場合）
+    const breakMinutes = parseFloat(breakHour) * 60 || 0;
+    
+    // 総労働時間を計算（分）
+    const totalMinutes = endMinutes - startMinutes - breakMinutes;
+    
+    // 時間に変換（小数点以下2桁まで）
+    const totalHour = (totalMinutes / 60).toFixed(2);
+    
+    return totalHour;
+  } catch (error) {
+    console.error('総労働時間計算エラー:', error);
+    return '';
+  }
+}
+
+// ===== 時間文字列を分に変換 =====
+function timeToMinutes_(timeString) {
+  const parts = timeString.split(':');
+  const hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1] || 0, 10);
+  return hours * 60 + minutes;
+}
+
 // ===== CSVファイル作成 =====
 function createCsvBlob_(shifts) {
   if (shifts.length === 0) {
-    return Utilities.newBlob('日付,店舗,従業員ID,従業員名,役職,開始時間,終了時間,休憩分,シフトタイプ,備考,承認者,承認日時\n', 'text/csv', 'shifts.csv');
+    return Utilities.newBlob('日付,店舗,従業員ID,従業員名,役職,開始時間,終了時間,休憩時間(時間),総労働時間(時間),シフトタイプ,業務内容,備考,承認者,承認日時\n', 'text/csv', 'shifts.csv');
   }
   
   // ヘッダー行
-  const headers = '日付,店舗,従業員ID,従業員名,役職,開始時間,終了時間,休憩分,シフトタイプ,備考,承認者,承認日時';
+  const headers = '日付,店舗,従業員ID,従業員名,役職,開始時間,終了時間,休憩時間(時間),総労働時間(時間),シフトタイプ,業務内容,備考,承認者,承認日時';
   
   // データ行
   const csvLines = [headers];
   
   for (const shift of shifts) {
+    // 総労働時間を計算
+    const totalHour = calculateTotalHour_(shift.start_time, shift.end_time, shift.break_hour);
+    
     const row = [
       shift.date,
       shift.store,
@@ -226,8 +267,10 @@ function createCsvBlob_(shifts) {
       shift.role,
       shift.start_time,
       shift.end_time,
-      shift.break_min,
+      shift.break_hour || '', // 休憩時間（時間）
+      totalHour, // 総労働時間（時間）
       shift.shift_type,
+      shift.work_content || '', // 業務内容
       shift.notes,
       shift.manager,
       shift.approved_at
@@ -305,8 +348,12 @@ function createSlackMessage_(shifts, fileUrl) {
     for (const [store, storeShifts] of Object.entries(shiftsByStore)) {
       message += `🏪 **${store}店**\n`;
       
-      // 時間順にソート
-      storeShifts.sort((a, b) => a.start_time.localeCompare(b.start_time));
+      // 時間順にソート（文字列化して安全に比較）
+      storeShifts.sort((a, b) => {
+        const timeA = String(a.start_time || '');
+        const timeB = String(b.start_time || '');
+        return timeA.localeCompare(timeB);
+      });
       
       for (const shift of storeShifts) {
         message += `🕐 *${shift.start_time}-${shift.end_time}*: ${shift.employee_name} (${shift.role}) - ${shift.work_content}\n`;
