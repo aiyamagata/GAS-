@@ -141,7 +141,28 @@ function getEmployeeShifts_(spreadsheetId, employeeId) {
       
       const shift = {};
       headers.forEach((header, index) => {
-        shift[header] = row[index];
+        const value = row[index];
+        // Dateオブジェクトの場合は適切な形式に変換
+        if (value instanceof Date) {
+          // 日付列の場合
+          if (header === 'date') {
+            shift[header] = Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+          }
+          // 時刻列の場合
+          else if (header === 'start_time' || header === 'end_time') {
+            shift[header] = Utilities.formatDate(value, Session.getScriptTimeZone(), 'HH:mm');
+          }
+          // その他の日時列の場合
+          else if (header === 'approved_at') {
+            shift[header] = Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+          }
+          // その他のDate列は文字列として表示
+          else {
+            shift[header] = value.toString();
+          }
+        } else {
+          shift[header] = value;
+        }
       });
       
       // 承認済みのシフトのみを対象
