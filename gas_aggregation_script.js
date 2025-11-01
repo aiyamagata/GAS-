@@ -60,19 +60,33 @@ function aggregateShiftsAndPostToSlack() {
     
     console.log(`📊 合計 ${allShifts.length}件のシフトデータを集約しました`);
     
-    // 3. 集約データをマスターシートに保存
+    // 今日の日付を取得（日本時間）
+    const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+    console.log(`📅 今日の日付: ${today}`);
+    
+    // 今日のシフトのみを抽出
+    const todayShifts = allShifts.filter(shift => {
+      const shiftDate = shift.date instanceof Date ? 
+        Utilities.formatDate(shift.date, 'Asia/Tokyo', 'yyyy-MM-dd') : 
+        shift.date;
+      return shiftDate === today;
+    });
+    
+    console.log(`📅 今日のシフト: ${todayShifts.length}件`);
+    
+    // 3. 集約データをマスターシートに保存（すべてのシフト）
     if (allShifts.length > 0) {
       saveAggregatedShifts_(allShifts);
       console.log('💾 集約データをマスターシートに保存しました');
     }
     
-    // 4. CSVファイルを作成してGoogleドライブに保存
-    const csvBlob = createCsvBlob_(allShifts);
+    // 4. CSVファイルを作成してGoogleドライブに保存（今日のシフトのみ）
+    const csvBlob = createCsvBlob_(todayShifts);
     const driveFile = saveToDrive_(csvBlob);
     console.log(`📁 CSVファイルをドライブに保存しました: ${driveFile.getName()}`);
     
-    // 5. Slackに投稿
-    const slackMessage = createSlackMessage_(allShifts, driveFile.getUrl());
+    // 5. Slackに投稿（今日のシフトのみ）
+    const slackMessage = createSlackMessage_(todayShifts, driveFile.getUrl());
     postToSlack_(slackMessage);
     console.log('📤 Slackに投稿しました');
     
